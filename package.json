@@ -1,0 +1,20 @@
+{
+  "name": "ai-research-agent",
+  "version": "1.0.0",
+  "description": "AI Research Agent — web search, document generation, multi-model",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "cors": "^2.8.5",
+    "pptxgenjs": "^4.0.1",
+    "exceljs": "^4.4.0",
+    "uuid": "^9.0.1"
+  }
+}

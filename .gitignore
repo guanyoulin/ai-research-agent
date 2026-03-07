@@ -1,0 +1,9 @@
+node_modules/
+output/*.pptx
+output/*.xlsx
+output/*.md
+output/*.json
+output/*.png
+!output/.gitkeep
+.env
+.DS_Store

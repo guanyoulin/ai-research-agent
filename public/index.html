@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Research Agent</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #080a10; color: #bfc7d5; min-height: 100vh; }
+    .container { max-width: 900px; margin: 0 auto; padding: 20px 14px; }
+    h1 { font-size: 22px; font-weight: 700; color: #e2e8f0; }
+    .subtitle { font-size: 12px; color: #475569; margin-top: 2px; }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+    .server-bar { padding: 6px 10px; border-radius: 6px; background: rgba(16,185,129,.06); border: 1px solid rgba(16,185,129,.15); margin: 12px 0; font-size: 11px; color: #6b7280; }
+    .server-bar code { color: #10b981; font-family: monospace; }
+    .input-row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .input-row input { flex: 1; padding: 10px 12px; border-radius: 7px; border: 1px solid rgba(16,185,129,.15); background: #0c1018; color: #dde2e9; font-size: 13px; font-family: inherit; outline: none; }
+    .input-row button { padding: 10px 20px; border-radius: 7px; border: none; background: linear-gradient(135deg,#10b981,#6366f1); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .input-row button:disabled { background: #1e293b; color: #4b5563; cursor: not-allowed; }
+    .examples { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 12px; }
+    .examples button { padding: 4px 9px; border-radius: 12px; border: 1px solid rgba(255,255,255,.04); background: rgba(255,255,255,.02); color: #4b5563; font-size: 10.5px; cursor: pointer; font-family: inherit; }
+    .tabs { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,.04); margin-bottom: 10px; }
+    .tabs button { padding: 7px 14px; border: none; background: transparent; color: #4b5563; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; border-bottom: 2px solid transparent; }
+    .tabs button.active { color: #e0e4ea; border-bottom-color: #10b981; }
+    .tab-badge { margin-left: 3px; padding: 0 5px; border-radius: 6px; background: rgba(16,185,129,.1); color: #10b981; font-size: 9px; }
+    .panel { max-height: 450px; overflow-y: auto; }
+    .panel::-webkit-scrollbar { width: 4px; } .panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,.07); border-radius: 2px; }
+    .step { display: flex; gap: 8px; align-items: flex-start; padding: 6px 10px; animation: fi .2s ease both; }
+    .step-icon { width: 22px; height: 22px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+    .step-title { font-size: 12px; font-weight: 600; }
+    .step-detail { font-size: 11px; color: #5c6575; font-family: monospace; line-height: 1.4; word-break: break-word; margin-top: 1px; }
+    .output-panel { padding: 12px 16px; background: rgba(255,255,255,.01); border-radius: 7px; border: 1px solid rgba(255,255,255,.03); }
+    .output-text { font-size: 13px; color: #cbd5e1; line-height: 1.65; white-space: pre-wrap; }
+    .usage { margin-top: 12px; padding: 5px 8px; border-radius: 4px; background: #080c14; font-size: 10px; color: #374151; font-family: monospace; }
+    .artifact { margin-bottom: 10px; border-radius: 8px; overflow: hidden; }
+    .artifact-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; }
+    .artifact-title { flex: 1; font-size: 12px; font-weight: 600; }
+    .artifact-file { font-size: 10px; color: #4b5563; margin-top: 1px; }
+    .dl-btn { padding: 6px 14px; border-radius: 6px; color: #fff; font-size: 12px; font-weight: 600; text-decoration: none; cursor: pointer; border: none; }
+    .error { margin-top: 10px; padding: 8px 12px; border-radius: 6px; background: rgba(248,113,113,.05); border: 1px solid rgba(248,113,113,.12); color: #f87171; font-size: 12px; }
+    .working { display: flex; align-items: center; gap: 4px; padding: 8px 10px; color: #10b981; font-size: 11px; }
+    .empty { color: #374151; font-size: 12px; text-align: center; padding: 20px; }
+    @keyframes fi { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes bk { 0%,100% { opacity:.3; } 50% { opacity:1; } }
+    .pulse { animation: bk 2s infinite; }
+    .pulse-fast { animation: bk 1s infinite; }
+  </style>
+</head>
+<body>
+<div class="container" id="app"></div>
+
+<script>
+const BACKEND = window.location.origin;
+
+const STEP_ICONS = { start:"▶", iter:"↻", think:"💭", tool:"🔧", exec:"⚡", result:"✓", search:"🔍", done:"●", error:"✕", info:"•" };
+const STEP_COLORS = { start:"#60a5fa", iter:"#818cf8", think:"#a78bfa", tool:"#fb923c", exec:"#f472b6", result:"#22d3ee", search:"#2dd4bf", done:"#4ade80", error:"#f87171", info:"#94a3b8" };
+const TOOL_ICONS = { create_presentation:"📽️", create_spreadsheet:"📊", create_report:"📄", create_chart:"📈", send_email:"✉️" };
+const TOOL_COLORS = { create_presentation:"#f472b6", create_spreadsheet:"#10b981", create_report:"#a78bfa", create_chart:"#f59e0b", send_email:"#3b82f6" };
+
+let state = { query:"", steps:[], result:null, usage:null, artifacts:[], running:false, error:null, tab:"steps" };
+
+function render() {
+  const s = state;
+  const app = document.getElementById("app");
+
+  let html = `
+    <div style="margin-bottom:14px">
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:2px">
+        <span style="font-size:9px;font-weight:700;letter-spacing:2px;color:#10b981;text-transform:uppercase">Live</span>
+        <span class="pulse" style="width:6px;height:6px;border-radius:50%;background:#10b981"></span>
+        <span style="font-size:9px;color:#475569;letter-spacing:1px">CONNECTED TO SERVER</span>
+      </div>
+      <h1>AI Research Agent</h1>
+      <p class="subtitle">Searches the web → creates real downloadable .pptx, .xlsx, and .md files</p>
+    </div>
+    <div class="server-bar">Server: <code>${BACKEND}</code></div>
+    <div class="input-row">
+      <input id="queryInput" value="${s.query.replace(/"/g, '&quot;')}" placeholder="Ask anything — the agent will research and create documents..." ${s.running ? "disabled" : ""}>
+      <button id="goBtn" ${s.running || !s.query.trim() ? "disabled" : ""}>${s.running ? "Working..." : "Run"}</button>
+    </div>`;
+
+  if (!s.steps.length && !s.running) {
+    html += `<div class="examples">
+      <button class="exBtn">Research the top 5 AI companies and create a presentation</button>
+      <button class="exBtn">Analyze global EV sales and create a spreadsheet</button>
+      <button class="exBtn">Research renewable energy trends and create a report</button>
+    </div>`;
+  }
+
+  if (s.steps.length || s.result) {
+    html += `<div class="tabs">
+      <button class="${s.tab==="steps"?"active":""}" data-tab="steps">Steps<span class="tab-badge">${s.steps.length}</span></button>
+      <button class="${s.tab==="output"?"active":""}" data-tab="output">Output</button>
+      <button class="${s.tab==="files"?"active":""}" data-tab="files">Files${s.artifacts.length?`<span class="tab-badge">${s.artifacts.length}</span>`:""}</button>
+    </div>`;
+
+    if (s.tab === "steps") {
+      html += `<div class="panel" id="stepsPanel">`;
+      s.steps.forEach((st, i) => {
+        const c = STEP_COLORS[st.type] || "#94a3b8";
+        html += `<div class="step" style="animation-delay:${i*.02}s">
+          <span class="step-icon" style="background:${c}18;border:1px solid ${c}35;color:${c}">${STEP_ICONS[st.type]||"•"}</span>
+          <div><div class="step-title" style="color:${c}">${st.title}</div>${st.detail?`<div class="step-detail">${st.detail.replace(/</g,"&lt;")}</div>`:""}</div>
+        </div>`;
+      });
+      if (s.running) html += `<div class="working"><span class="pulse-fast">●</span>Agent working...</div>`;
+      html += `</div>`;
+    }
+
+    if (s.tab === "output") {
+      html += `<div class="panel output-panel">`;
+      if (s.result) {
+        html += `<div class="output-text">${s.result.replace(/</g,"&lt;")}</div>`;
+        if (s.usage) html += `<div class="usage">Tokens: ${(s.usage.input_tokens||0).toLocaleString()} in / ${(s.usage.output_tokens||0).toLocaleString()} out</div>`;
+      } else {
+        html += `<div class="empty">${s.running?"Working...":"No output yet."}</div>`;
+      }
+      html += `</div>`;
+    }
+
+    if (s.tab === "files") {
+      html += `<div class="panel">`;
+      if (s.artifacts.length) {
+        html += `<div style="font-size:11px;color:#6b7280;margin-bottom:8px">Click Download to get the real file.</div>`;
+        s.artifacts.forEach(a => {
+          const c = TOOL_COLORS[a.tool] || "#94a3b8";
+          const icon = TOOL_ICONS[a.tool] || "📎";
+          const dlUrl = a.download_url || "";
+          html += `<div class="artifact" style="border:1px solid ${c}30;background:${c}08">
+            <div class="artifact-header">
+              <span style="font-size:16px">${icon}</span>
+              <div style="flex:1"><div class="artifact-title" style="color:${c}">${a.title||a.tool}</div>${a.filename?`<div class="artifact-file">${a.filename}</div>`:""}</div>
+              ${dlUrl ? `<a href="${dlUrl}" target="_blank" class="dl-btn" style="background:${c}">Download</a>` : ""}
+            </div>
+          </div>`;
+        });
+      } else {
+        html += `<div class="empty">${s.running?"Generating...":"No files yet. Ask the agent to create a presentation, spreadsheet, or report."}</div>`;
+      }
+      html += `</div>`;
+    }
+  }
+
+  if (s.error && !s.running) {
+    html += `<div class="error">${s.error.replace(/</g,"&lt;")}</div>`;
+  }
+
+  app.innerHTML = html;
+
+  // Bind events
+  const input = document.getElementById("queryInput");
+  if (input) {
+    input.addEventListener("input", e => { state.query = e.target.value; });
+    input.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  }
+  const btn = document.getElementById("goBtn");
+  if (btn) btn.addEventListener("click", go);
+
+  document.querySelectorAll(".exBtn").forEach(b => {
+    b.addEventListener("click", () => { state.query = b.textContent; render(); });
+  });
+  document.querySelectorAll("[data-tab]").forEach(b => {
+    b.addEventListener("click", () => { state.tab = b.dataset.tab; render(); });
+  });
+
+  // Auto-scroll steps
+  const panel = document.getElementById("stepsPanel");
+  if (panel) panel.scrollTop = panel.scrollHeight;
+}
+
+async function go() {
+  if (!state.query.trim() || state.running) return;
+  state.steps = []; state.result = null; state.usage = null; state.artifacts = []; state.error = null; state.running = true; state.tab = "steps";
+  render();
+
+  try {
+    const res = await fetch(`${BACKEND}/api/agent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: state.query.trim() }),
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === "step") {
+            state.steps.push({
+              type: data.step==="api_call"?"iter": data.step==="reasoning"?"think": data.step==="tool_call"?"tool": data.step==="executing"?"exec": data.step==="tool_result"?"result": data.step==="search_results"?"search": data.step==="start"?"start":"info",
+              title: data.step==="api_call"?`Loop ${data.iteration} (${data.model})`: data.step==="reasoning"?"Reasoning": data.step==="tool_call"?`Tool: ${data.tool}`: data.step==="executing"?`Run: ${data.tool}`: data.step==="tool_result"?`${data.success?"✓":"✕"} ${data.tool}`: data.step==="search_results"?`${data.count} results`: data.step==="start"?"Agent Started":data.step,
+              detail: data.text||data.message||data.sources?.join(" · ")||"",
+            });
+          } else if (data.type === "artifact") {
+            state.artifacts.push({
+              tool: data.tool, title: data.title,
+              download_url: data.download_url ? `${BACKEND}${data.download_url}` : null,
+              filename: data.filename,
+            });
+          } else if (data.type === "done") {
+            state.result = data.text || "";
+            state.usage = data.usage;
+          } else if (data.type === "error") {
+            state.error = data.message;
+          }
+          render();
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    state.error = e.message;
+  }
+  state.running = false;
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

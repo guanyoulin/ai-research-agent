@@ -17,12 +17,16 @@ if (!fs.existsSync(OUTPUT_DIR)) fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 // Serve generated files
 app.use("/files", express.static(OUTPUT_DIR));
 
-// Health check
-app.get("/", (req, res) => {
+// Serve frontend UI
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+// Health check (API endpoint)
+app.get("/health", (req, res) => {
   res.json({
     status: "running",
     agent: "AI Research Agent v4",
     endpoints: {
+      ui: "GET /",
       agent: "POST /api/agent",
       generate_pptx: "POST /api/generate-pptx",
       generate_xlsx: "POST /api/generate-xlsx",

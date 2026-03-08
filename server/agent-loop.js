@@ -97,26 +97,47 @@ const TOOLS = [
   },
 ];
 
-async function callClaude(messages, model) {
+async function callClaude(messages, model, onStep) {
   if (!API_KEY) throw new Error("ANTHROPIC_API_KEY not set. Add it in Railway environment variables.");
 
   const body = { model, max_tokens: 4096, system: SYSTEM_PROMPT, tools: TOOLS, messages };
+  const MAX_RETRIES = 3;
 
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(body),
-  });
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Claude API ${res.status}: ${text.slice(0, 300)}`);
+    // Rate limited — wait and retry
+    if (res.status === 429) {
+      // Check for retry-after header, default to exponential backoff
+      const retryAfter = res.headers.get("retry-after");
+      const waitSecs = retryAfter ? parseInt(retryAfter, 10) : Math.min(30 * attempt, 90);
+
+      if (attempt < MAX_RETRIES) {
+        if (onStep) onStep({ step: "rate_limit", attempt, wait: waitSecs, message: `Rate limited. Waiting ${waitSecs}s before retry ${attempt}/${MAX_RETRIES}...` });
+        await new Promise(resolve => setTimeout(resolve, waitSecs * 1000));
+        continue;
+      }
+      // Final attempt also failed
+      const text = await res.text();
+      throw new Error(`Rate limit exceeded after ${MAX_RETRIES} retries. Wait a minute and try again. (${text.slice(0, 200)})`);
+    }
+
+    // Other errors — don't retry
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Claude API ${res.status}: ${text.slice(0, 300)}`);
+    }
+
+    return res.json();
   }
-  return res.json();
 }
 
 async function runAgentLoop(userMessage, onStep, onArtifact) {
@@ -130,7 +151,7 @@ async function runAgentLoop(userMessage, onStep, onArtifact) {
     const model = hasSearched && iter > 2 ? SYNTHESIS_MODEL : RESEARCH_MODEL;
     onStep({ step: "api_call", iteration: iter, model: model.includes("opus") ? "Opus 4.6" : "Sonnet" });
 
-    const data = await callClaude(msgs, model);
+    const data = await callClaude(msgs, model, onStep);
 
     // Parse blocks
     const texts = [], toolCalls = [], searchBlocks = [];

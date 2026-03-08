@@ -1,5 +1,6 @@
 const path = require("path");
 const { executeTool } = require("./tool-executors");
+const { getSkillsConfig, downloadSkillFile } = require("./skills-manager");
 
 const API_URL = "https://api.anthropic.com/v1/messages";
 const API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -100,23 +101,39 @@ const TOOLS = [
 async function callClaude(messages, model, onStep) {
   if (!API_KEY) throw new Error("ANTHROPIC_API_KEY not set. Add it in Railway environment variables.");
 
-  const body = { model, max_tokens: 4096, system: SYSTEM_PROMPT, tools: TOOLS, messages };
+  // Merge skills config (modular — only adds if ENABLE_SKILLS is set)
+  const skillsConfig = getSkillsConfig();
+  const allTools = [...TOOLS];
+  if (skillsConfig.skillTools.length) {
+    allTools.push(...skillsConfig.skillTools);
+  }
+
+  const body = { model, max_tokens: 4096, system: SYSTEM_PROMPT, tools: allTools, messages };
+  if (skillsConfig.container) {
+    body.container = skillsConfig.container;
+  }
+
+  // Build headers — add beta headers if skills are enabled
+  const headers = {
+    "Content-Type": "application/json",
+    "x-api-key": API_KEY,
+    "anthropic-version": "2023-06-01",
+  };
+  if (skillsConfig.betas.length) {
+    headers["anthropic-beta"] = skillsConfig.betas.join(",");
+  }
+
   const MAX_RETRIES = 3;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     const res = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": API_KEY,
-        "anthropic-version": "2023-06-01",
-      },
+      headers,
       body: JSON.stringify(body),
     });
 
     // Rate limited — wait and retry
     if (res.status === 429) {
-      // Check for retry-after header, default to exponential backoff
       const retryAfter = res.headers.get("retry-after");
       const waitSecs = retryAfter ? parseInt(retryAfter, 10) : Math.min(30 * attempt, 90);
 
@@ -125,12 +142,10 @@ async function callClaude(messages, model, onStep) {
         await new Promise(resolve => setTimeout(resolve, waitSecs * 1000));
         continue;
       }
-      // Final attempt also failed
       const text = await res.text();
       throw new Error(`Rate limit exceeded after ${MAX_RETRIES} retries. Wait a minute and try again. (${text.slice(0, 200)})`);
     }
 
-    // Other errors — don't retry
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`Claude API ${res.status}: ${text.slice(0, 300)}`);

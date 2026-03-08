@@ -82,9 +82,35 @@ app.post("/api/generate-xlsx", async (req, res) => {
   }
 });
 
+// ─── Skills Management Endpoints ───
+const { listSkills, getEnabledAnthropicSkills, getCustomSkillIds } = require("./skills-manager");
+
+app.get("/api/skills", async (req, res) => {
+  try {
+    const source = req.query.source || undefined;
+    const skills = await listSkills(source);
+    res.json({
+      enabled_anthropic: getEnabledAnthropicSkills(),
+      enabled_custom: getCustomSkillIds(),
+      available: skills,
+    });
+  } catch (err) {
+    res.json({
+      enabled_anthropic: getEnabledAnthropicSkills(),
+      enabled_custom: getCustomSkillIds(),
+      note: "Skills API not accessible — skills may still work if IDs are correct",
+      error: err.message,
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
+  const anthSkills = getEnabledAnthropicSkills();
+  const customSkills = getCustomSkillIds();
   console.log(`Agent server running on port ${PORT}`);
   console.log(`Research model: ${process.env.RESEARCH_MODEL || "claude-sonnet-4-5-20250929"}`);
   console.log(`Synthesis model: ${process.env.SYNTHESIS_MODEL || "claude-opus-4-6"}`);
+  console.log(`Anthropic skills: ${anthSkills.length ? anthSkills.join(", ") : "none (set ENABLE_SKILLS to activate)"}`);
+  console.log(`Custom skills: ${customSkills.length ? customSkills.join(", ") : "none (set CUSTOM_SKILL_IDS to activate)"}`);
 });
